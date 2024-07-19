@@ -215,6 +215,8 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	// fmt.Printf("%v: now's Term is %v\n", rf.me, rf.currentTerm)
+
 	reply.Term = rf.currentTerm
 	if args.Term < rf.currentTerm {
 		reply.Success = false
@@ -224,43 +226,60 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 	// 判断是心跳还是附加日志RPC
 
 	// 心跳
+
+	// if len(args.Entries) == 0 {
+	// 	// fmt.Printf("%v: the heartbeat receive\n", rf.me)
+	// 	reply.Success = true
+	// 	if args.PrevLogIndex <= len(rf.log)-1 && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
+	// 		reply.Success = true
+	// 	}
+
+	// 	rf.resetRoleL(args.Term)
+	// 	rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+	// } else {
+
+	// 如果自身日志条目为空------将所有日志条目复制过来即可
+	// 如果prevLogIndex为负数------说明自身的nextIndex为空，也说明自身的有效的日志条目为空，将所有日志条目复制过来即可
+	// 如果都不，则需要判断当前索引下的日志条目的任期是否相同
+	// 如果相同---说明前面的日志条目都相同，则将传入的日志条目添加到后面-----需要处理prevLogIndex在中间的情况
+	// 如果不相同，则返回false
+
+	// fmt.Printf("%v: the receivelog is: %v\n", rf.me, args.Entries)
+
+	// 领导人的prev日志长度要不大于该节点的日志长度
+
+	reply.Success = false
+	canApply := false
+
 	if len(args.Entries) == 0 {
-		// fmt.Printf("%v: the heartbeat receive\n", rf.me)
-		reply.Success = true
-
 		rf.resetRoleL(args.Term)
-		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-	} else {
-		reply.Success = false
-
-		// 如果自身日志条目为空------将所有日志条目复制过来即可
-		// 如果prevLogIndex为负数------说明自身的nextIndex为空，也说明自身的有效的日志条目为空，将所有日志条目复制过来即可
-		// 如果都不，则需要判断当前索引下的日志条目的任期是否相同
-		// 如果相同---说明前面的日志条目都相同，则将传入的日志条目添加到后面-----需要处理prevLogIndex在中间的情况
-		// 如果不相同，则返回false
-
-		// fmt.Printf("%v: the receivelog is: %v\n", rf.me, args.Entries)
-
-		if len(rf.log) == 0 {
-			reply.Success = true
-			rf.log = append(rf.log, args.Entries...)
-		} else if args.PrevLogIndex == -1 {
-			reply.Success = true
-			rf.log = make([]Log, 0)
-			rf.log = append(rf.log, args.Entries...)
-		} else if rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
-			reply.Success = true
-			rf.manageLogAppendL(args.PrevLogIndex, args.Entries)
-		}
-
-		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-
-		// fmt.Printf("%v: the newlog is: %v\n", rf.me, rf.log)
-
 	}
 
-	rf.applyLogL()
+	if args.PrevLogIndex <= len(rf.log)-1 && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
+		reply.Success = true
+		canApply = true
+		rf.manageLogAppendL(args.PrevLogIndex, args.Entries)
+	}
+
+	rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+
+	// fmt.Printf("%v: the newlog is: %v\n", rf.me, rf.log)
+
+	// }
+	if canApply {
+		rf.applyLogL()
+	}
 }
+
+// follower也需要辨别
+// 如果follower中有leader中没有的日志条目，那么不能提交
+// 需要保证follower中的日志条目都是leader中有的
+
+// 但是follower需要在心跳的时候提交日志条目，
+
+// follower通过心跳中的commitIndex来判断是否需要提交日志
+
+// 如果一个follower掉线后（有不同的日志条目），重新加入网络中，那么需要对follower的日志进行处理后才
 
 func (rf *Raft) manageLogAppendL(prevLogIndex int, entries []Log) {
 	if prevLogIndex != len(rf.log)-1 {
@@ -361,9 +380,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		term = rf.currentTerm
 	} else {
 		term = rf.currentTerm
+		index = len(rf.log)
 		rf.log = append(rf.log, Log{rf.currentTerm, command})
 		// fmt.Printf("%v: the log is: %v-------------------------------------\n", rf.me, rf.log)
-		index = len(rf.log)
 	}
 
 	return index, term, isLeader
@@ -405,12 +424,15 @@ func (rf *Raft) ticker() {
 			// 发送附加条目/心跳
 			rf.appendEntryPreL(true)
 		} else if time.Now().After(rf.electiontime) { // 达到随机选举超时时间，开始选举
+
 			// 重新设置随机选举超时时间
 			rf.setElectionTime()
 			// 发送选举请求
 
 			// 设置自身状态
 			rf.currentTerm += 1
+			// fmt.Printf("electionTime out, and request new leader, this Term is %v\n", rf.currentTerm)
+
 			rf.role = Candidate
 			rf.votedFor = rf.me
 
@@ -458,12 +480,10 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 			// 只有一条日志和没有日志的时候
 			// 不管日志是否为空，只要next为0，则说明全覆盖
 			// 使用nextIndex切片来得到prev两个的值
+
+			// 初始拥有一个空日志条目，则nextIndex初始大小为1
 			prevLogIndex = rf.nextIndex[i] - 1
-			if prevLogIndex < 0 {
-				prevLogTerm = 0
-			} else {
-				prevLogTerm = rf.log[prevLogIndex].Term
-			}
+			prevLogTerm = rf.log[prevLogIndex].Term
 
 			// 使用lastLogIndex判断是否需要有日志条目
 			// 处理日志
@@ -527,6 +547,8 @@ func (rf *Raft) processRequestVoteReplyL(reply *RequestVoteReply, argsTerm int, 
 }
 func (rf *Raft) processAppendEntryReplyL(reply *AppendEntryReply, args *AppendEntryArgs, peer int) {
 
+	// fmt.Printf("%v from %v : leader's Term is %v, follower's Term is %v\n", rf.me, peer, rf.currentTerm, reply.Term)
+
 	// 受到一个更大的任期号，则转为follower
 	if reply.Term > rf.currentTerm {
 		rf.resetRoleL(reply.Term)
@@ -544,9 +566,11 @@ func (rf *Raft) processAppendEntryReplyL(reply *AppendEntryReply, args *AppendEn
 			rf.nextIndex[peer] += len(args.Entries)
 			rf.matchIndex[peer] = rf.nextIndex[peer] - 1
 			//处理提交事项
+
+			// 只有当前任期内的日志可以通过计数来提交，之前的日志只能通过当前日志的保护下提交
 			rf.advanceCommitL()
 
-		} else if rf.nextIndex[peer] > 0 { //返回失败，且任期号leader更大，说明该位置出现日志冲突，需要回退nextIndex值，但注意，该值不能小于0
+		} else if rf.nextIndex[peer] > 1 { //返回失败，且任期号leader更大，说明该位置出现日志冲突，需要回退nextIndex值，但注意，该值不能（不会）小于1
 			rf.nextIndex[peer]--
 		}
 	}
@@ -563,14 +587,16 @@ func (rf *Raft) advanceCommitL() {
 	sort.Ints(sortedMatchIndex)
 	N := sortedMatchIndex[len(rf.peers)/2]
 
-	// fmt.Printf("%v: N is %v, commitIndex is %v\n", rf.me, N, rf.commitIndex)
-
-	if rf.role == Leader && N > rf.commitIndex && rf.log[N].Term == rf.currentTerm {
-		// fmt.Printf("%v: upgrade CommitIndex: %v\n", rf.me, N)
-
-		rf.commitIndex = N
-		rf.applyLogL()
+	if rf.log[N].Term == rf.currentTerm {
+		if rf.role == Leader && N > rf.commitIndex && rf.log[N].Term == rf.currentTerm {
+			// fmt.Printf("%v: upgrade CommitIndex: %v\n", rf.me, N)
+			rf.commitIndex = N
+			rf.applyLogL()
+		}
+	} else {
+		// fmt.Printf("cannot commit log before\n")
 	}
+	// fmt.Printf("%v: N is %v, commitIndex is %v\n", rf.me, N, rf.commitIndex)
 }
 
 func (rf *Raft) applyLogL() {
@@ -581,18 +607,21 @@ func (rf *Raft) applyLogL() {
 		applyMsg := ApplyMsg{
 			CommandValid: true,
 			Command:      rf.log[rf.lastApplied].Opertion,
-			CommandIndex: rf.lastApplied + 1,
+			CommandIndex: rf.lastApplied,
 		}
 		// fmt.Printf("%v: in applyLog, the command is %v\n", rf.me, applyMsg.Command)
 
 		rf.applyCh <- applyMsg
 	}
 	// fmt.Printf("%v: out applyLog, lastApplied is %v, commitIndex is %v\n", rf.me, rf.lastApplied, rf.commitIndex)
-
 }
 
 func (rf *Raft) newLeaderL() {
 	rf.role = Leader
+	// // 如果新领导的日志为空，则新
+	// if len(rf.log) == 0 {
+	// 	rf.log = append(rf.log, Log{})
+	// }
 	// 修改nextIndex
 	for i := range rf.nextIndex {
 		rf.nextIndex[i] = len(rf.log)
@@ -612,7 +641,7 @@ func (rf *Raft) resetRoleL(newTerm int) {
 
 func (rf *Raft) setElectionTime() {
 	t := time.Now()
-	t = t.Add(150 * time.Millisecond)
+	t = t.Add(1000 * time.Millisecond)
 	rand.Seed(time.Now().UnixNano())
 	ms := rand.Intn(150)
 	t = t.Add(time.Duration(ms) * time.Millisecond)
@@ -641,10 +670,13 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.currentTerm = 0
 	rf.votedFor = -1
-	rf.log = make([]Log, 0)
 
-	rf.commitIndex = -1
-	rf.lastApplied = -1
+	// 添加一个空日志条目
+	rf.log = make([]Log, 0)
+	rf.log = append(rf.log, Log{Term: 0})
+
+	rf.commitIndex = 0
+	rf.lastApplied = 0
 
 	rf.nextIndex = make([]int, len(peers))
 	rf.matchIndex = make([]int, len(peers))

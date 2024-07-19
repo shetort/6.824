@@ -200,7 +200,14 @@ func TestFailAgree2B(t *testing.T) {
 	cfg.one(105, servers-1, false)
 
 	// re-connect
+	leader = cfg.checkOneLeader()
+	// fmt.Printf("first: the leader now is %v\n", leader)
+
+	// fmt.Printf("connect the node\n")
 	cfg.connect((leader + 1) % servers)
+
+	leader = cfg.checkOneLeader()
+	// fmt.Printf("second: the leader now is %v\n", leader)
 
 	// the full set of servers should preserve
 	// previous agreements, and be able to agree
@@ -375,6 +382,8 @@ func TestRejoin2B(t *testing.T) {
 
 	// leader network failure
 	leader1 := cfg.checkOneLeader()
+	// fmt.Printf("first: the leader now is %v\n", leader1)
+
 	cfg.disconnect(leader1)
 
 	// make old leader try to agree on some entries
@@ -382,20 +391,32 @@ func TestRejoin2B(t *testing.T) {
 	cfg.rafts[leader1].Start(103)
 	cfg.rafts[leader1].Start(104)
 
+	// leader := cfg.checkOneLeader()
+	// fmt.Printf("second: the leader now is %v\n", leader)
+
 	// new leader commits, also for index=2
+
 	cfg.one(103, 2, true)
 
 	// new leader network failure
 	leader2 := cfg.checkOneLeader()
+	// fmt.Printf("third: the leader now is %v\n", leader2)
+
 	cfg.disconnect(leader2)
 
 	// old leader connected again
 	cfg.connect(leader1)
 
+	// leader = cfg.checkOneLeader()
+	// fmt.Printf("forth: the leader now is %v\n", leader)
+
 	cfg.one(104, 2, true)
 
 	// all together now
 	cfg.connect(leader2)
+
+	// leader = cfg.checkOneLeader()
+	// fmt.Printf("fivth: the leader now is %v\n", leader)
 
 	cfg.one(105, servers, true)
 

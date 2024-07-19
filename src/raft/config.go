@@ -534,6 +534,7 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 			// submitted our command; wait a while for agreement.
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
+
 				nd, cmd1 := cfg.nCommitted(index)
 				// fmt.Printf("----------------cmd1: %v, cmd: %v------------------------\n", cmd1, cmd)
 
@@ -550,6 +551,7 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 				cfg.t.Fatalf("one(%v) failed to reach agreement", cmd)
 			}
 		} else {
+			// fmt.Printf("no this command\n")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
