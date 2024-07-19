@@ -20,6 +20,8 @@ package raft
 import (
 	//	"bytes"
 
+	"bytes"
+	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -27,6 +29,7 @@ import (
 	"time"
 
 	//	"6.824/labgob"
+	"6.824/labgob"
 	"6.824/labrpc"
 )
 
@@ -111,12 +114,17 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	logTemp := make([]Log, len(rf.log)-1)
+	copy(logTemp, rf.log[1:])
+	e.Encode(logTemp)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
+
+	// fmt.Printf("%v: save persistData of log %v\n", rf.me, logTemp)
 }
 
 // restore previously persisted state.
@@ -126,17 +134,29 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+
+	var currentTerm int
+	var votedFor int
+	var log []Log
+
+	rf.log = make([]Log, 0)
+	rf.log = append(rf.log, Log{Term: 0})
+
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&log) != nil {
+		fmt.Println("decode error")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = append(rf.log, log...)
+	}
+	// fmt.Printf("%v: read persistData of log %v\n", rf.me, rf.log)
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -206,6 +226,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidatedId
 		rf.setElectionTime()
+		rf.persist()
 	}
 	reply.Term = rf.currentTerm
 }
@@ -245,6 +266,8 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 		reply.Success = true
 		canApply = true
 		rf.manageLogAppendL(args.PrevLogIndex, args.Entries)
+
+		rf.persist()
 	}
 
 	rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
@@ -258,12 +281,16 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 
 func (rf *Raft) manageLogAppendL(prevLogIndex int, entries []Log) {
 	if prevLogIndex != len(rf.log)-1 {
-		logEntriesT := rf.log[0:prevLogIndex]
+		logEntriesT := rf.log[0 : prevLogIndex+1]
+		// fmt.Printf("%v: show the logEntriesT %v\n", rf.me, logEntriesT)
 		rf.log = make([]Log, prevLogIndex+1)
 		copy(rf.log, logEntriesT)
+		// fmt.Printf("%v: show the first rf.log  %v\n", rf.me, rf.log)
 	}
 
 	rf.log = append(rf.log, entries...)
+	// fmt.Printf("%v: show the second rf.log  %v\n", rf.me, rf.log)
+
 }
 
 func (rf *Raft) Checklog(canLastLogIndex int, canLastLogTerm int) bool {
@@ -357,6 +384,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		term = rf.currentTerm
 		index = len(rf.log)
 		rf.log = append(rf.log, Log{rf.currentTerm, command})
+		rf.persist()
 		// fmt.Printf("%v: the log is: %v-------------------------------------\n", rf.me, rf.log)
 	}
 
@@ -410,6 +438,8 @@ func (rf *Raft) ticker() {
 
 			rf.role = Candidate
 			rf.votedFor = rf.me
+
+			rf.persist()
 
 			rf.requestVotePreL()
 		}
@@ -603,14 +633,15 @@ func (rf *Raft) resetRoleL(newTerm int) {
 	rf.role = Follower
 	rf.votedFor = -1
 	rf.currentTerm = newTerm
+	rf.persist()
 	rf.setElectionTime()
 }
 
 func (rf *Raft) setElectionTime() {
 	t := time.Now()
-	t = t.Add(1000 * time.Millisecond)
+	t = t.Add(100 * time.Millisecond)
 	rand.Seed(time.Now().UnixNano())
-	ms := rand.Intn(300)
+	ms := rand.Intn(400)
 	t = t.Add(time.Duration(ms) * time.Millisecond)
 	rf.electiontime = t
 }
