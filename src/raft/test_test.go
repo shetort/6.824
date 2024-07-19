@@ -396,7 +396,7 @@ func TestRejoin2B(t *testing.T) {
 
 	// new leader commits, also for index=2
 
-	fmt.Printf("commit\n")
+	// fmt.Printf("commit\n")
 	cfg.one(103, 2, true)
 
 	// new leader network failure

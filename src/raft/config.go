@@ -401,7 +401,7 @@ func (cfg *config) checkOneLeader() int {
 		}
 
 		if len(leaders) != 0 {
-			fmt.Printf("now Term is %v\n", lastTermWithLeader)
+			// fmt.Printf("now Term is %v\n", lastTermWithLeader)
 			return leaders[lastTermWithLeader][0]
 		}
 	}

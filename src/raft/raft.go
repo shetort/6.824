@@ -20,7 +20,6 @@ package raft
 import (
 	//	"bytes"
 
-	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -471,9 +470,9 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 				entriesT := rf.log[rf.nextIndex[i]:]
 				copy(entries, entriesT)
 				// fmt.Printf("%v to %v: the sendLog is: %v\n", rf.me, i, entries)
-				fmt.Printf("%v to %v: the nextIndex is: %v\n", rf.me, i, rf.nextIndex)
+				// fmt.Printf("%v to %v: the nextIndex is: %v\n", rf.me, i, rf.nextIndex)
 			} else {
-				fmt.Printf("%v to %v: HeartBeat\n", rf.me, i)
+				// fmt.Printf("%v to %v: HeartBeat\n", rf.me, i)
 				entries = make([]Log, 0)
 			}
 
@@ -599,7 +598,7 @@ func (rf *Raft) newLeaderL() {
 	for i := range rf.nextIndex {
 		rf.nextIndex[i] = len(rf.log)
 	}
-	fmt.Printf("%v: show the nextIndex: %v\n", rf.me, rf.nextIndex)
+	// fmt.Printf("%v: show the nextIndex: %v\n", rf.me, rf.nextIndex)
 
 	//发送心跳确立权威
 	rf.appendEntryPreL(true)
