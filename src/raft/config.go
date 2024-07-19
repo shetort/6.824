@@ -8,19 +8,23 @@ package raft
 // test with the original before submitting.
 //
 
-import "6.824/labgob"
-import "6.824/labrpc"
-import "bytes"
-import "log"
-import "sync"
-import "testing"
-import "runtime"
-import "math/rand"
-import crand "crypto/rand"
-import "math/big"
-import "encoding/base64"
-import "time"
-import "fmt"
+import (
+	"bytes"
+	"log"
+	"math/rand"
+	"runtime"
+	"sync"
+	"testing"
+
+	"6.824/labgob"
+	"6.824/labrpc"
+
+	crand "crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"math/big"
+	"time"
+)
 
 func randstring(n int) string {
 	b := make([]byte, 2*n)
@@ -146,6 +150,8 @@ func (cfg *config) checkLogs(i int, m ApplyMsg) (string, bool) {
 	}
 	_, prevok := cfg.logs[i][m.CommandIndex-1]
 	cfg.logs[i][m.CommandIndex] = v
+
+	// fmt.Printf("show the cfg.logs[i][m.CommandIndex]: %v\n", cfg.logs[i][m.CommandIndex])
 	if m.CommandIndex > cfg.maxIndex {
 		cfg.maxIndex = m.CommandIndex
 	}
@@ -156,8 +162,11 @@ func (cfg *config) checkLogs(i int, m ApplyMsg) (string, bool) {
 // contents
 func (cfg *config) applier(i int, applyCh chan ApplyMsg) {
 	for m := range applyCh {
+		// fmt.Printf("in the applier\n")
+		// fmt.Printf("show the applyCh: %v\n", m)
 		if m.CommandValid == false {
 			// ignore other types of ApplyMsg
+			// fmt.Printf("ignore the apply\n")
 		} else {
 			cfg.mu.Lock()
 			err_msg, prevok := cfg.checkLogs(i, m)
@@ -230,13 +239,11 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 	}
 }
 
-//
 // start or re-start a Raft.
 // if one already exists, "kill" it first.
 // allocate new outgoing port file names, and a new
 // state persister, to isolate previous instance of
 // this server. since we cannot really kill it.
-//
 func (cfg *config) start1(i int, applier func(int, chan ApplyMsg)) {
 	cfg.crash1(i)
 
@@ -440,6 +447,8 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 
 		cfg.mu.Lock()
 		cmd1, ok := cfg.logs[i][index]
+
+		// fmt.Printf("the cmd1 in %v's index-%v is %v\n", i, index, cmd1)
 		cfg.mu.Unlock()
 
 		if ok {
@@ -526,6 +535,8 @@ func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
 				nd, cmd1 := cfg.nCommitted(index)
+				// fmt.Printf("----------------cmd1: %v, cmd: %v------------------------\n", cmd1, cmd)
+
 				if nd > 0 && nd >= expectedServers {
 					// committed
 					if cmd1 == cmd {
