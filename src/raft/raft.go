@@ -562,8 +562,11 @@ func (rf *Raft) processAppendEntryReplyL(reply *AppendEntryReply, args *AppendEn
 
 		if reply.Success {
 			// 处理nextIndex的值
-			rf.nextIndex[peer] += len(args.Entries)
-			rf.matchIndex[peer] = rf.nextIndex[peer] - 1
+			// rf.nextIndex[peer] += len(args.Entries)
+			// rf.matchIndex[peer] = rf.nextIndex[peer] - 1
+
+			rf.matchIndex[peer] = args.PrevLogIndex + len(args.Entries)
+			rf.nextIndex[peer] = rf.matchIndex[peer] + 1
 			//处理提交事项
 
 			// 只有当前任期内的日志可以通过计数来提交，之前的日志只能通过当前日志的保护下提交
