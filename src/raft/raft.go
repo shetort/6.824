@@ -451,17 +451,11 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 			term = rf.currentTerm
 			leaderId = rf.me
 
-			// 怎么判断
-			// 只有一条日志和没有日志的时候
-			// 不管日志是否为空，只要next为0，则说明全覆盖
-			// 使用nextIndex切片来得到prev两个的值
-
 			// 初始拥有一个空日志条目，则nextIndex初始大小为1
 			prevLogIndex = rf.nextIndex[i] - 1
 			prevLogTerm = rf.log[prevLogIndex].Term
 
 			// 使用lastLogIndex判断是否需要有日志条目
-			// 处理日志
 			// 将nextIndex及后面的所有日志都附上
 			// 如果nextIndex小于等于log的lastLogIndex，说明需要将日志传出去
 			lastLogIndex := len(rf.log) - 1
