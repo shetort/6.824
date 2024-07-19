@@ -20,6 +20,7 @@ package raft
 import (
 	//	"bytes"
 
+	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -222,21 +223,7 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 		reply.Success = false
 		return
 	}
-
-	// 判断是心跳还是附加日志RPC
-
-	// 心跳
-
-	// if len(args.Entries) == 0 {
-	// 	// fmt.Printf("%v: the heartbeat receive\n", rf.me)
-	// 	reply.Success = true
-	// 	if args.PrevLogIndex <= len(rf.log)-1 && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
-	// 		reply.Success = true
-	// 	}
-
-	// 	rf.resetRoleL(args.Term)
-	// 	rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
-	// } else {
+	rf.setElectionTime()
 
 	// 如果自身日志条目为空------将所有日志条目复制过来即可
 	// 如果prevLogIndex为负数------说明自身的nextIndex为空，也说明自身的有效的日志条目为空，将所有日志条目复制过来即可
@@ -265,21 +252,10 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 
 	// fmt.Printf("%v: the newlog is: %v\n", rf.me, rf.log)
 
-	// }
 	if canApply {
 		rf.applyLogL()
 	}
 }
-
-// follower也需要辨别
-// 如果follower中有leader中没有的日志条目，那么不能提交
-// 需要保证follower中的日志条目都是leader中有的
-
-// 但是follower需要在心跳的时候提交日志条目，
-
-// follower通过心跳中的commitIndex来判断是否需要提交日志
-
-// 如果一个follower掉线后（有不同的日志条目），重新加入网络中，那么需要对follower的日志进行处理后才
 
 func (rf *Raft) manageLogAppendL(prevLogIndex int, entries []Log) {
 	if prevLogIndex != len(rf.log)-1 {
@@ -440,7 +416,7 @@ func (rf *Raft) ticker() {
 		}
 
 		rf.mu.Unlock()
-		time.Sleep(time.Duration(50) * time.Millisecond)
+		time.Sleep(time.Duration(100) * time.Millisecond)
 	}
 }
 
@@ -495,9 +471,9 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 				entriesT := rf.log[rf.nextIndex[i]:]
 				copy(entries, entriesT)
 				// fmt.Printf("%v to %v: the sendLog is: %v\n", rf.me, i, entries)
-				// fmt.Printf("%v to %v: the nextIndex is: %v\n", rf.me, i, rf.nextIndex)
+				fmt.Printf("%v to %v: the nextIndex is: %v\n", rf.me, i, rf.nextIndex)
 			} else {
-				// fmt.Printf("%v to %v: HeartBeat\n", rf.me, i)
+				fmt.Printf("%v to %v: HeartBeat\n", rf.me, i)
 				entries = make([]Log, 0)
 			}
 
@@ -572,6 +548,7 @@ func (rf *Raft) processAppendEntryReplyL(reply *AppendEntryReply, args *AppendEn
 
 		} else if rf.nextIndex[peer] > 1 { //返回失败，且任期号leader更大，说明该位置出现日志冲突，需要回退nextIndex值，但注意，该值不能（不会）小于1
 			rf.nextIndex[peer]--
+			// fmt.Printf("%v: new nextIndex: %v\n", rf.me, rf.nextIndex)
 		}
 	}
 }
@@ -618,14 +595,11 @@ func (rf *Raft) applyLogL() {
 
 func (rf *Raft) newLeaderL() {
 	rf.role = Leader
-	// // 如果新领导的日志为空，则新
-	// if len(rf.log) == 0 {
-	// 	rf.log = append(rf.log, Log{})
-	// }
 	// 修改nextIndex
 	for i := range rf.nextIndex {
 		rf.nextIndex[i] = len(rf.log)
 	}
+	fmt.Printf("%v: show the nextIndex: %v\n", rf.me, rf.nextIndex)
 
 	//发送心跳确立权威
 	rf.appendEntryPreL(true)
@@ -643,7 +617,7 @@ func (rf *Raft) setElectionTime() {
 	t := time.Now()
 	t = t.Add(1000 * time.Millisecond)
 	rand.Seed(time.Now().UnixNano())
-	ms := rand.Intn(150)
+	ms := rand.Intn(300)
 	t = t.Add(time.Duration(ms) * time.Millisecond)
 	rf.electiontime = t
 }
