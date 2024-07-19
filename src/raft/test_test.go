@@ -661,62 +661,62 @@ func TestPersist22C(t *testing.T) {
 
 	index := 1
 	for iters := 0; iters < 5; iters++ {
-		fmt.Printf("-----------the %v times loop begin-----------\n", iters)
+		// fmt.Printf("-----------the %v times loop begin-----------\n", iters)
 
 		cfg.one(10+index, servers, true)
 		index++
 
 		leader1 := cfg.checkOneLeader()
-		fmt.Printf("first  the leader is %v\n", leader1)
+		// fmt.Printf("first  the leader is %v\n", leader1)
 
 		cfg.disconnect((leader1 + 1) % servers)
 		cfg.disconnect((leader1 + 2) % servers)
 
-		fmt.Printf("node live now is  %v %v %v\n", leader1, (leader1+3)%servers, (leader1+4)%servers)
+		// fmt.Printf("node live now is  %v %v %v\n", leader1, (leader1+3)%servers, (leader1+4)%servers)
 
-		fmt.Printf("start: apply some command\n")
+		// fmt.Printf("start: apply some command\n")
 		cfg.one(10+index, servers-2, true)
 		index++
 
-		fmt.Printf("done: apply some command\n")
+		// fmt.Printf("done: apply some command\n")
 
 		cfg.disconnect((leader1 + 0) % servers)
 		cfg.disconnect((leader1 + 3) % servers)
 		cfg.disconnect((leader1 + 4) % servers)
 
-		fmt.Printf("disconnect all node\n")
+		// fmt.Printf("disconnect all node\n")
 
 		cfg.start1((leader1+1)%servers, cfg.applier)
 		cfg.start1((leader1+2)%servers, cfg.applier)
 		cfg.connect((leader1 + 1) % servers)
 		cfg.connect((leader1 + 2) % servers)
 
-		fmt.Printf("restart two node: %v %v\n", (leader1+1)%servers, (leader1+2)%servers)
+		// fmt.Printf("restart two node: %v %v\n", (leader1+1)%servers, (leader1+2)%servers)
 
 		time.Sleep(RaftElectionTimeout)
 
 		cfg.start1((leader1+3)%servers, cfg.applier)
 		cfg.connect((leader1 + 3) % servers)
 
-		fmt.Printf("restart one node: %v\n", (leader1+3)%servers)
+		// fmt.Printf("restart one node: %v\n", (leader1+3)%servers)
 
-		leader := cfg.checkOneLeader()
-		fmt.Printf("Second%v  the leader is %v\n", iters, leader)
-		fmt.Printf("node live now is  %v %v %v\n", (leader1+1)%servers, (leader1+2)%servers, (leader1+3)%servers)
+		// leader := cfg.checkOneLeader()
+		// fmt.Printf("Second%v  the leader is %v\n", iters, leader)
+		// fmt.Printf("node live now is  %v %v %v\n", (leader1+1)%servers, (leader1+2)%servers, (leader1+3)%servers)
 
-		fmt.Printf("start: apply some command\n")
+		// fmt.Printf("start: apply some command\n")
 		cfg.one(10+index, servers-2, true)
 		index++
 
-		fmt.Printf("done: apply some command\n")
+		// fmt.Printf("done: apply some command\n")
 		cfg.connect((leader1 + 4) % servers)
 		cfg.connect((leader1 + 0) % servers)
 
-		fmt.Printf("--------------the %v times loop done\n---------------", iters)
+		// fmt.Printf("--------------the %v times loop done\n---------------", iters)
 	}
 
-	leader := cfg.checkOneLeader()
-	fmt.Printf("Third  the leader is %v\n", leader)
+	// leader := cfg.checkOneLeader()
+	// fmt.Printf("Third  the leader is %v\n", leader)
 	cfg.one(1000, servers, true)
 
 	cfg.end()
