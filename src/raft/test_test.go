@@ -200,14 +200,14 @@ func TestFailAgree2B(t *testing.T) {
 	cfg.one(105, servers-1, false)
 
 	// re-connect
-	leader = cfg.checkOneLeader()
-	// fmt.Printf("first: the leader now is %v\n", leader)
+	// leader1 := cfg.checkOneLeader()
+	// fmt.Printf("first: the leader now is %v\n", leader1)
 
 	// fmt.Printf("connect the node\n")
 	cfg.connect((leader + 1) % servers)
 
-	leader = cfg.checkOneLeader()
-	// fmt.Printf("second: the leader now is %v\n", leader)
+	// leader1 = cfg.checkOneLeader()
+	// fmt.Printf("second: the leader now is %v\n", leader1)
 
 	// the full set of servers should preserve
 	// previous agreements, and be able to agree

@@ -205,8 +205,10 @@ type AppendEntryArgs struct {
 }
 
 type AppendEntryReply struct {
-	Term    int
-	Success bool
+	Term         int
+	Success      bool
+	ConfictIndex int
+	ConfictTerm  int
 }
 
 // example RequestVote RPC handler.
@@ -261,16 +263,33 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 	if len(args.Entries) == 0 {
 		rf.resetRoleL(args.Term)
 	}
-
 	if args.PrevLogIndex <= len(rf.log)-1 && rf.log[args.PrevLogIndex].Term == args.PrevLogTerm {
 		reply.Success = true
-		canApply = true
+		// canApply = true
 		rf.manageLogAppendL(args.PrevLogIndex, args.Entries)
 
 		rf.persist()
+	} else {
+		if args.PrevLogIndex <= len(rf.log)-1 { //任期冲突
+			reply.ConfictTerm = rf.log[args.PrevLogIndex].Term
+		} else { // 领导人的日志长度超过跟随者的日志长度,采取逐步减少index的方式
+			reply.ConfictTerm = -1
+		}
+		reply.ConfictIndex = len(rf.log)
+		for i := 0; i < len(rf.log); i++ {
+			if rf.log[i].Term == reply.ConfictTerm {
+				reply.ConfictIndex = i
+				break
+			}
+		}
 	}
 
 	rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+
+	// 检测是否可以“保护提交日志”
+	if args.LeaderCommit < len(rf.log) && rf.log[args.LeaderCommit].Term >= args.Term {
+		canApply = true
+	}
 
 	// fmt.Printf("%v: the newlog is: %v\n", rf.me, rf.log)
 
@@ -482,6 +501,9 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 			leaderId = rf.me
 
 			// 初始拥有一个空日志条目，则nextIndex初始大小为1
+
+			// fmt.Printf("%v to %v: prepare the logEntries, and the nextIndex is %v\n ", rf.me, i, rf.nextIndex)
+
 			prevLogIndex = rf.nextIndex[i] - 1
 			prevLogTerm = rf.log[prevLogIndex].Term
 
@@ -493,13 +515,12 @@ func (rf *Raft) appendEntryPreL(isHeartBeat bool) {
 				entries = make([]Log, lastLogIndex-rf.nextIndex[i]+1)
 				entriesT := rf.log[rf.nextIndex[i]:]
 				copy(entries, entriesT)
-				// fmt.Printf("%v to %v: the sendLog is: %v\n", rf.me, i, entries)
 				// fmt.Printf("%v to %v: the nextIndex is: %v\n", rf.me, i, rf.nextIndex)
 			} else {
 				// fmt.Printf("%v to %v: HeartBeat\n", rf.me, i)
 				entries = make([]Log, 0)
 			}
-
+			// fmt.Printf("%v to %v: the length of sendLog is: %v\n", rf.me, i, len(entries))
 			leaderCommit = rf.commitIndex
 
 			args := AppendEntryArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
@@ -562,20 +583,42 @@ func (rf *Raft) processAppendEntryReplyL(reply *AppendEntryReply, args *AppendEn
 
 		if reply.Success {
 			// 处理nextIndex的值
-			// rf.nextIndex[peer] += len(args.Entries)
-			// rf.matchIndex[peer] = rf.nextIndex[peer] - 1
+			// fmt.Printf("%v from %v: Success, and show the nextIndex before is %v\n", rf.me, peer, rf.nextIndex)
 
-			rf.matchIndex[peer] = args.PrevLogIndex + len(args.Entries)
-			rf.nextIndex[peer] = rf.matchIndex[peer] + 1
-			//处理提交事项
+			rf.nextIndex[peer] = args.PrevLogIndex + len(args.Entries) + 1
+			rf.matchIndex[peer] = rf.nextIndex[peer] - 1
+
+			// rf.matchIndex[peer] = args.PrevLogIndex + len(args.Entries)
+			// rf.nextIndex[peer] = rf.matchIndex[peer] + 1
+
+			// fmt.Printf("%v from %v: Success, the len(Entries) is %v and show the nextIndex after is %v\n", rf.me, peer, len(args.Entries), rf.nextIndex)
 
 			// 只有当前任期内的日志可以通过计数来提交，之前的日志只能通过当前日志的保护下提交
 			rf.advanceCommitL()
 
-		} else if rf.nextIndex[peer] > 1 { //返回失败，且任期号leader更大，说明该位置出现日志冲突，需要回退nextIndex值，但注意，该值不能（不会）小于1
-			rf.nextIndex[peer]--
-			// fmt.Printf("%v: new nextIndex: %v\n", rf.me, rf.nextIndex)
+		} else {
+			// 首先将nextIndex更新为冲突任期的第一个日志
+
+			// fmt.Printf("%v: show the nextIndex[peer]: %v, reply.ConfictIndex: %v\n", rf.me, rf.nextIndex[peer], reply.ConfictIndex)
+
+			rf.nextIndex[peer] = reply.ConfictIndex
+
+			// fmt.Printf("%v: first new nextIndex: %v\n", rf.me, rf.nextIndex)
+
+			// 循环遍历，找到是否存在该任期号的最后一条日志，并返回索引
+			for i := len(rf.log) - 1; i >= 0; i-- {
+				if rf.log[i].Term == reply.ConfictTerm {
+					// fmt.Printf("%v: find the confictIndex: %v\n", rf.me, i+1)
+					rf.nextIndex[peer] = i + 1
+					break
+				}
+			}
+			// fmt.Printf("%v: confict new nextIndex: %v\n", rf.me, rf.nextIndex)
 		}
+		// } else if rf.nextIndex[peer] > 1 {
+		// 	rf.nextIndex[peer]
+		// 	fmt.Printf("%v: delt new nextIndex: %v\n", rf.me, rf.nextIndex)
+		// }
 	}
 }
 
@@ -590,6 +633,7 @@ func (rf *Raft) advanceCommitL() {
 	sort.Ints(sortedMatchIndex)
 	N := sortedMatchIndex[len(rf.peers)/2]
 
+	// 日志中的任期和当前任期相同时，可以进行保护提交
 	if rf.log[N].Term == rf.currentTerm {
 		if rf.role == Leader && N > rf.commitIndex && rf.log[N].Term == rf.currentTerm {
 			// fmt.Printf("%v: upgrade CommitIndex: %v\n", rf.me, N)
@@ -625,7 +669,7 @@ func (rf *Raft) newLeaderL() {
 	for i := range rf.nextIndex {
 		rf.nextIndex[i] = len(rf.log)
 	}
-	// fmt.Printf("%v: show the nextIndex: %v\n", rf.me, rf.nextIndex)
+	// fmt.Printf("%v: new Leader, show the nextIndex: %v\n", rf.me, rf.nextIndex)
 
 	//发送心跳确立权威
 	rf.appendEntryPreL(true)
