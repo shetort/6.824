@@ -142,6 +142,7 @@ func (cfg *config) checkLogs(i int, m ApplyMsg) (string, bool) {
 	v := m.Command
 	for j := 0; j < len(cfg.logs); j++ {
 		if old, oldok := cfg.logs[j][m.CommandIndex]; oldok && old != v {
+			// fmt.Printf("show the oldok is %v", old)
 			log.Printf("%v: log %v; server %v\n", i, cfg.logs[i], cfg.logs[j])
 			// some server has already committed a different value for this entry!
 			err_msg = fmt.Sprintf("commit index=%v server=%v %v != server=%v %v",
@@ -191,7 +192,9 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 	lastApplied := 0
 	for m := range applyCh {
 		if m.SnapshotValid {
-			//DPrintf("Installsnapshot %v %v\n", m.SnapshotIndex, lastApplied)
+			// DPrintf("Installsnapshot %v %v\n", m.SnapshotIndex, lastApplied)
+
+			// fmt.Printf("receive the snapshot\n")
 			cfg.mu.Lock()
 			if cfg.rafts[i].CondInstallSnapshot(m.SnapshotTerm,
 				m.SnapshotIndex, m.Snapshot) {
@@ -203,6 +206,9 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 					log.Fatalf("decode error\n")
 				}
 				cfg.logs[i][m.SnapshotIndex] = v
+
+				// fmt.Printf("%v: %v v is %v show the right: %v\n", i, m.SnapshotIndex, v, cfg.logs[i])
+
 				lastApplied = m.SnapshotIndex
 			}
 			cfg.mu.Unlock()
@@ -222,12 +228,18 @@ func (cfg *config) applierSnap(i int, applyCh chan ApplyMsg) {
 			}
 			lastApplied = m.CommandIndex
 			if (m.CommandIndex+1)%SnapShotInterval == 0 {
+				// fmt.Printf("should have SnapShot\n")
+				// fmt.Printf("the args of service is commandIndex: %v\n", m.CommandIndex)
 				w := new(bytes.Buffer)
 				e := labgob.NewEncoder(w)
 				v := m.Command
 				e.Encode(v)
+				// fmt.Printf("in SnapShot,the data is %v\n", w.Bytes())
+
 				cfg.rafts[i].Snapshot(m.CommandIndex, w.Bytes())
+				// fmt.Printf("out SnapShot\n")
 			}
+
 		} else {
 			// Ignore other types of ApplyMsg or old
 			// commands. Old command may never happen,
@@ -510,7 +522,7 @@ func (cfg *config) wait(index int, n int, startTerm int) interface{} {
 func (cfg *config) one(cmd interface{}, expectedServers int, retry bool) int {
 	t0 := time.Now()
 	starts := 0
-	for time.Since(t0).Seconds() < 20 {
+	for time.Since(t0).Seconds() < 10 {
 		// try all the servers, maybe one is the leader.
 		index := -1
 		for si := 0; si < cfg.n; si++ {

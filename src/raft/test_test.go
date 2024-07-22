@@ -1065,6 +1065,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 
 	cfg.one(rand.Int(), servers, true)
 	leader1 := cfg.checkOneLeader()
+	// fmt.Printf("the leader first is %v\n", leader1)
 
 	for i := 0; i < iters; i++ {
 		victim := (leader1 + 1) % servers
@@ -1073,21 +1074,36 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			sender = (leader1 + 1) % servers
 			victim = leader1
 		}
+		// fmt.Printf("the victim is %v\n", victim)
+		// fmt.Printf("the sender is %v\n", sender)
 
 		if disconnect {
 			cfg.disconnect(victim)
+			// fmt.Printf("disconnect the victim %v\n", victim)
 			cfg.one(rand.Int(), servers-1, true)
+			// fmt.Printf("commit one command 1111111\n")
 		}
 		if crash {
+			// fmt.Printf("crash the victim %v\n", victim)
 			cfg.crash1(victim)
 			cfg.one(rand.Int(), servers-1, true)
+			// fmt.Printf("commit one command 2222222\n")
 		}
 		// send enough to get a snapshot
+
+		// leader := cfg.checkOneLeader()
+		// fmt.Printf("the leader is %v\n", leader)
+		// fmt.Printf("Start commit some Command\n")
 		for i := 0; i < SnapShotInterval+1; i++ {
+			// fmt.Printf("i: %v\n", i)
 			cfg.rafts[sender].Start(rand.Int())
 		}
+		// fmt.Printf("Done the Command commit\n")
 		// let applier threads catch up with the Start()'s
-		cfg.one(rand.Int(), servers-1, true)
+		// fmt.Printf("commit one command 10000\n")
+		cfg.one(10000, servers-1, true)
+
+		// fmt.Printf("Check they are same\n")
 
 		if cfg.LogSize() >= MAXLOGSIZE {
 			cfg.t.Fatalf("Log size too large")
@@ -1095,16 +1111,26 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 		if disconnect {
 			// reconnect a follower, who maybe behind and
 			// needs to rceive a snapshot to catch up.
+			// fmt.Printf("reconnect the victim %v\n", victim)
 			cfg.connect(victim)
+			// leader2 := cfg.checkOneLeader()
+			// fmt.Printf("the leader second is %v\n", leader2)
+			// fmt.Printf("reCheck if they are some\n")
+
 			cfg.one(rand.Int(), servers, true)
 			leader1 = cfg.checkOneLeader()
 		}
 		if crash {
+			// fmt.Printf("recover the victim %v\n", victim)
 			cfg.start1(victim, cfg.applierSnap)
 			cfg.connect(victim)
+			// fmt.Printf("reconnect the victim %v\n", victim)
+			// fmt.Printf("reCheck if they are some\n")
 			cfg.one(rand.Int(), servers, true)
 			leader1 = cfg.checkOneLeader()
+			// fmt.Printf("the leader second is %v\n", leader1)
 		}
+		// fmt.Printf("the %v done\n", i)
 	}
 	cfg.end()
 }
