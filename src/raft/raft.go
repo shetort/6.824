@@ -772,6 +772,7 @@ func (rf *Raft) advanceCommitL() {
 		}
 	} else {
 		// fmt.Printf("cannot commit log before\n")
+		return
 	}
 }
 
