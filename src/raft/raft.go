@@ -22,22 +22,12 @@ package raft
 // 存储在node节点的lastIncludedIndex也是全局索引
 // nextIndex和matchIndex也是全局索引
 // commitIndex和lastAppliedIndex都是全局索引
-
 // 对于每个节点使用的索引是局部索引
-
 // 局部索引和全局索引之间通过lastIncludedIndex进行转化
-
 // 也就是说，从lab2c转化为lab2d，除了快照之外，还需要做的一件重要的事，就是将所有使用类似于 len(rf.log)、rf.log[index]的地方都需要转化
-
 // 此外，每个节点会单独进行快照，故而领导者只需要发现跟随者落后的情况下用InstallSnapShot进行同步
 
-// 落后：1、准备发送附加日志的时候发现nextIndex【peer】低于lastIncludedIndex
-// 	2、处理附加日志回复时，发现跟随者的日志比领导者短
-// 	3、处理附加日志回复时，发现即使回退到lastIncludedIndex（领导者的最低日志索引）后，依然找不到匹配项
-
 import (
-	//	"bytes"
-
 	"bytes"
 	"fmt"
 	"math/rand"
@@ -46,7 +36,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	//	"6.824/labgob"
 	"6.824/labgob"
 	"6.824/labrpc"
 )
@@ -464,12 +453,6 @@ func (rf *Raft) manageLogAppendL(prevLogIndex int, entries []Log) {
 
 func (rf *Raft) Checklog(canLastLogIndex int, canLastLogTerm int) bool {
 	lastLogIndex := rf.globalLogIndexL(len(rf.log))
-	// var lastLogTerm int
-	// if lastLogIndex == 0 {
-	// 	lastLogTerm = 0
-	// } else {
-	// 	lastLogTerm = rf.log[rf.localLogIndexL(lastLogIndex-1)].Term
-	// }
 
 	lastLogTerm := rf.log[rf.localLogIndexL(lastLogIndex-1)].Term
 	if canLastLogTerm > lastLogTerm {
