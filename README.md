@@ -4,4 +4,4 @@
 完成情况如下
 
 - lab1:修改了测试脚本。在执行wait -n报错，将其修改为wait
-- lab2:all pass
+- lab2:通过全部测试点
