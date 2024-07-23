@@ -17,6 +17,21 @@ package raft
 //   in the same server.
 //
 
+// 整体代码思路：
+// 2A和2B的实现沿袭了Frans教授的实现思路，但2C和2D部分是自己的思路
+// 函数名后加了L的代表调用环境是已经上锁了的
+
+// 实现2D时，尤其注意死锁的问题
+// 如果出现2D调用了太多次的insatllsnap传递，请注意跟随者的log[0]处的日志的term是否正确
+// 实现时多使用日志输出，多看输出的信息，找到出问题的地方
+
+// 实现2C时，尤其注意要认真实现figure8的各种要求
+// 此外还要注意回退nextIndex的处理，不要使用逐步回退。否则时间太长过不了测试点
+// 还要注意是否实现了领导人选举限制的要求
+
+// 实现2B时
+// 要保证下标不越界的情况下，才能进行日志判断（即领导者的日志条目可能远大于跟随者）
+
 // 关于2D
 // 来自服务器的index是全局索引
 // 存储在node节点的lastIncludedIndex也是全局索引
@@ -373,9 +388,6 @@ func (rf *Raft) AppendEntry(args *AppendEntryArgs, reply *AppendEntryReply) {
 	if args.LeaderCommit < rf.globalLogIndexL(len(rf.log)) && rf.localLogIndexL(rf.commitIndex) >= 0 && rf.log[rf.localLogIndexL(rf.commitIndex)].Term == args.Term {
 		canApply = true
 	}
-
-	// fmt.Printf("%v: the newlog is: %v\n", rf.me, rf.log)
-	// fmt.Printf("%v: show the args of self: commitIndex: %v, lastAppliedIndex: %v\n", rf.me, rf.commitIndex, rf.lastApplied)
 
 	if canApply {
 		rf.applyCond.Signal()
